@@ -118,8 +118,8 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
     {
         if (SDL_GetRelativeMouseState(NULL, NULL) & SDL_BUTTON_LMASK)
         {
-            *xOffset += 0.001 * double(event->button.x - mouseCoords->x);
-            *yOffset += 0.001 * double(event->button.y - mouseCoords->y);
+            *xOffset += 0.002 * double(mouseCoords->x - event->button.x);
+            *yOffset += 0.002 * double(mouseCoords->y - event->button.y);
             mouseCoords->x = event->button.x;
             mouseCoords->y = event->button.y;
         }
