@@ -18,8 +18,8 @@ using std::endl;
 using namespace std::chrono;
 
 int getNumIters(const complex<double>* complexNum);
-bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, double* xOffset, double* yOffset);
-void coordsToComplex(const int* x, const int* y, const double* xOffset, const double* yOffset, complex<double>* result);
+bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, double* xOffset, double* yOffset, double* xZoom, double* yZoom);
+void coordsToComplex(const int* x, const int* y, const double* xOffset, const double* yOffset, const double* xZoom, const double* yZoom, complex<double>* result);
 
 int main(int argc, char* argv[]) {
     int iterations;
@@ -29,30 +29,37 @@ int main(int argc, char* argv[]) {
     SDL_Renderer* renderer;
     SDL_Window* window;
 
-    double xOffset = -2;
-    double yOffset = -1.5;
+    //Used to keep track of panning
+    double xPanOffset = -2;
+    double yPanOffset = -1.5;
     bool mousePanning = false;
-    SDL_Point mouseCoords;
+
+    //Used to keep track of panning
+    double xZoomScale = 4;
+    double yZoomScale = 3;
+
+    SDL_Point mousePanningCoords;
 
     SDL_Init(SDL_INIT_VIDEO);
     SDL_CreateWindowAndRenderer(int(WINDOW_WIDTH), int(WINDOW_HEIGHT), 0, &window, &renderer);
-    while (!eventHandler(&event, &mousePanning, &mouseCoords, &xOffset, &yOffset))
+    while (!eventHandler(&event, &mousePanning, &mousePanningCoords, &xPanOffset, &yPanOffset, &xZoomScale, &yZoomScale))
     {
-        //auto start = high_resolution_clock::now();
+        auto start = high_resolution_clock::now();
         for (int y = 0; y < WINDOW_HEIGHT; y++)
             for (int x = 0; x < WINDOW_WIDTH; x++)
             {
                 /*Creates a complex number based on the coordinates of whichever pixel we are
                 drawing and calculates how many iterations were needed to decide whether it is
                 in the mandelbrot set*/
-                coordsToComplex(&x, &y, &xOffset, &yOffset, &complexPixel);
+                coordsToComplex(&x, &y, &xPanOffset, &yPanOffset, &xZoomScale, &yZoomScale, &complexPixel);
                 iterations = getNumIters(&complexPixel);
 
                 if (iterations == MAX_ITER)
+                    //Each pixel that is in the mandelbrot set is black
                     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
                 else
                 {
-                    //Makes the fractal look cool (decides the color of a pixel in the mandelbrot set)
+                    //Makes the fractal look cool (decides the color of a pixel that isn't in the mandelbrot set)
                     switch (iterations % 16)
                     {
                     case 0: SDL_SetRenderDrawColor(renderer, 66, 30, 15, 255); break;
@@ -77,7 +84,7 @@ int main(int argc, char* argv[]) {
                 SDL_RenderDrawPoint(renderer, x, y);
             }
         SDL_RenderPresent(renderer);
-        //cout << "Rendered in " << duration_cast<milliseconds>(high_resolution_clock::now() - start).count() << "ms" << endl;
+        cout << "Rendered in " << duration_cast<milliseconds>(high_resolution_clock::now() - start).count() << "ms" << endl;
     }
 
     //Cleaning up
@@ -100,26 +107,27 @@ int getNumIters(const complex<double>* complexNum)
 }
 
 //Converts a pixel's coordinates to a complex number (result)
-void coordsToComplex(const int* x, const int* y, const double* xOffset, const double* yOffset, complex<double>* result)
+void coordsToComplex(const int* x, const int* y, const double* xOffset, const double* yOffset, const double* xZoom, const double* yZoom, complex<double>* result)
 {
-    result->real(*xOffset + (*x / WINDOW_WIDTH) * 4);
-    result->imag(*yOffset + (*y / WINDOW_HEIGHT) * 3);
+    result->real(*xOffset + (*x / WINDOW_WIDTH) * *xZoom);
+    result->imag(*yOffset + (*y / WINDOW_HEIGHT) * *yZoom);
 }
 
 /*Handles mouse/keyboard events. Will return true if the user has chosen to close the window
 or false otherwise*/
-bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, double* xOffset, double* yOffset)
+bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, double* xOffset, double* yOffset, double* xZoom, double* yZoom)
 {
     SDL_PollEvent(event);
     if (event->type == SDL_QUIT)
         return true;
 
+    //Handles panning events
     if (*mousePanning)
     {
         if (SDL_GetRelativeMouseState(NULL, NULL) & SDL_BUTTON_LMASK)
         {
-            *xOffset += 0.002 * double(mouseCoords->x - event->button.x);
-            *yOffset += 0.002 * double(mouseCoords->y - event->button.y);
+            *xOffset += (0.001 * *xZoom) * double(mouseCoords->x - event->button.x);
+            *yOffset += (0.001 * *yZoom) * double(mouseCoords->y - event->button.y);
             mouseCoords->x = event->button.x;
             mouseCoords->y = event->button.y;
         }
@@ -135,5 +143,34 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
     }
     else if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT)
         *mousePanning = false;
+
+    //Handles scroll wheel zoom events
+    const unsigned char* kbState = SDL_GetKeyboardState(NULL);
+    if (event->type == SDL_MOUSEWHEEL)
+    {
+        if (event->wheel.y > 0)
+        {
+            *xZoom *= 0.9;
+            *yZoom *= 0.9;
+        }
+        else if (event->wheel.y < 0)
+        {
+            *xZoom *= 1.1;
+            *yZoom *= 1.1;
+        }
+    }
+
+    //Handles keyboard zoom events (zoom in with W, zoom out with s)
+    if (kbState[SDL_SCANCODE_W])
+    {
+        *xZoom *= 0.9;
+        *yZoom *= 0.9;
+    }
+    else if (kbState[SDL_SCANCODE_S])
+    {
+        *xZoom *= 1.1;
+        *yZoom *= 1.1;
+    }
+
     return false;
 }
