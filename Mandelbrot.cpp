@@ -151,8 +151,8 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
         //Pans if the left mouse button is still being held down
         if (SDL_GetRelativeMouseState(NULL, NULL) & SDL_BUTTON_LMASK)
         {
-            *xOffset += (0.001 * *xZoom) * double(mouseCoords->x - event->button.x);
-            *yOffset += (0.001 * *yZoom) * double(mouseCoords->y - event->button.y);
+            *xOffset += (0.001 / *xZoom) * double(mouseCoords->x - event->button.x);
+            *yOffset += (0.001 / *yZoom) * double(mouseCoords->y - event->button.y);
             mouseCoords->x = event->button.x;
             mouseCoords->y = event->button.y;
         }
@@ -172,9 +172,7 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
     else if (event->type == SDL_MOUSEWHEEL)
     {
         if (event->wheel.y > 0)
-        {
             zoomIn(xZoom, yZoom);
-        }
         else if (event->wheel.y < 0)
             zoomOut(xZoom, yZoom);
         event->wheel.y = 0;

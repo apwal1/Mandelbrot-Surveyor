@@ -62,7 +62,7 @@ bool fracThread::isThreadDone()
 //Converts a pixel's coordinates to a complex number (result)
 void fracThread::coordsToComplex(const int* x, const int* y, complex<double>* result)
 {
-    result->real(*xOffset + ((*x / *xZoom) / windowWidth));
+    result->real(*xOffset + (*x / windowWidth) / *xZoom);
     result->imag(*yOffset + (*y / windowHeight) / *yZoom);
 }
 
