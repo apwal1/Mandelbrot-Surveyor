@@ -6,9 +6,9 @@
 #include "fracThread.h"
 #include <SDL.h>
 
-//Window width and height as a double to avoid int/double conversion for each pixel (very small performance increase)
-#define WINDOW_WIDTH 1280.0
-#define WINDOW_HEIGHT 720.0
+//Window width and height
+#define WINDOW_WIDTH 1280
+#define WINDOW_HEIGHT 720
 
 /*Max iterations before a complex number is considered to not be in the mandelbrot set.
 Increasing this will result in a better quality fractal with reduced performance.
@@ -24,57 +24,60 @@ using std::endl;
 using std::vector;
 using std::thread;
 using std::atomic;
+using std::pair;
+
 using namespace std::chrono;
 
-bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, double* xOffset, double* yOffset, double* xZoom, double* yZoom);
-void zoomIn(double* xZoom, double* yZoom);
-void zoomOut(double* xZoom, double* yZoom);
+bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, fracState* state);
+void zoom(fracState* state, double zoomAmount);
+void pan(int* beforeX, int* beforeY, const int* afterX, const int* afterY, fracState* state);
 
 int main(int argc, char* argv[]) {
-    complex<double> complexPixel;
-
     SDL_Event event;
     SDL_Renderer* renderer;
     SDL_Window* window;
 
     //Used to keep track of panning
-    double xPanOffset = -2;
-    double yPanOffset = -1.5;
     bool mousePanning = false;
     SDL_Point mousePanningCoords;
 
-    //Used to keep track of zooming
-    double xZoomScale = .25;
-    double yZoomScale = .33;
+    //Initializes the fractal to the middle of the screen
+    fracState state(-WINDOW_WIDTH / 2, -WINDOW_HEIGHT / 2);
 
     fracThread* threads[NUM_THREADS];
 
-    //Creating a 2d array of ints (the hard way)
-    int** result = new int* [int(WINDOW_WIDTH)];
+    //Creating a 2d array of ints
+    int** result = new int* [WINDOW_WIDTH];
     for (int i = 0; i < WINDOW_WIDTH; i++)
-        result[i] = new int [int(WINDOW_HEIGHT)];
+        result[i] = new int [WINDOW_HEIGHT];
 
+    //Initializes our array of fracThreads
     for (int i = 0; i < NUM_THREADS; i++)
     {
-        SDL_Point start = { i * int(WINDOW_WIDTH / NUM_THREADS), 0 };
-        SDL_Point end = { (i + 1) * int(WINDOW_WIDTH / NUM_THREADS), int(WINDOW_HEIGHT) };
-        threads[i] = new fracThread(WINDOW_WIDTH, WINDOW_HEIGHT, MAX_ITER, start, end, result);
+        SDL_Point start = { i * WINDOW_WIDTH / NUM_THREADS, 0 };
+        SDL_Point end = { (i + 1) * WINDOW_WIDTH / NUM_THREADS, WINDOW_HEIGHT };
+        pair<SDL_Point, SDL_Point> bounds(start, end);
+        threads[i] = new fracThread(WINDOW_WIDTH, WINDOW_HEIGHT, MAX_ITER, bounds, result, &state);
     }
 
 
     SDL_Init(SDL_INIT_VIDEO);
-    SDL_CreateWindowAndRenderer(int(WINDOW_WIDTH), int(WINDOW_HEIGHT), 0, &window, &renderer);
-    while (!eventHandler(&event, &mousePanning, &mousePanningCoords, &xPanOffset, &yPanOffset, &xZoomScale, &yZoomScale))
+    SDL_CreateWindowAndRenderer(WINDOW_WIDTH, WINDOW_HEIGHT, 0, &window, &renderer);
+
+    while (!eventHandler(&event, &mousePanning, &mousePanningCoords, &state))
     {
         auto start = high_resolution_clock::now();
+
         //Starts the threads
         for (auto& i : threads)
-            i->run(&xPanOffset, &yPanOffset, &xZoomScale, &yZoomScale);
+            i->run();
 
-        //Waits for every thread to finish the frame
+        //Waits for every thread to finish its portion of the frame
         for (auto& i : threads)
-            while(!i->isThreadDone());
-        cout << "Rendered in " << duration_cast<milliseconds>(high_resolution_clock::now() - start).count() << "ms" << endl;
+            i->waitUntilDone();
+
+        duration<double> time = high_resolution_clock::now() - start;
+        cout << "Created result array in " << time.count() << " seconds\n";
 
         //Determines the color of each pixel and draws it to the screen
         for (int x = 0; x < WINDOW_WIDTH; x++)
@@ -85,6 +88,7 @@ int main(int argc, char* argv[]) {
                 else
                 {
                     //Makes the fractal look nice (color choosing)
+                    //These values were taken from https://stackoverflow.com/questions/16500656/which-color-gradient-is-used-to-color-mandelbrot-in-wikipedia
                     switch (result[x][y] % 16)
                     {
                     case 0: SDL_SetRenderDrawColor(renderer, 66, 30, 15, 255); break;
@@ -107,7 +111,6 @@ int main(int argc, char* argv[]) {
                 }
                 SDL_RenderDrawPoint(renderer, x, y);
             }
-
         SDL_RenderPresent(renderer);
     }
 
@@ -123,80 +126,98 @@ int main(int argc, char* argv[]) {
         delete threads[i];
     }
 
-    //Cleaning up 2D array of results
+    //Cleaning up 2D result array
     for (int x = 0; x < WINDOW_WIDTH; x++)
-    {
         delete[] result[x];
-    }
     delete[] result;
 
     return 0;
 }
 
+/*Raises/lowers the zoom scale by a passed amount. Zooming will occur relative to the center of the window
+  Amounts > 1 will result in a zoom-in, amounts < 1 will result in a zoom-out*/
+void zoom(fracState* state, double zoomAmount)
+{
+    pair<double, double> beforeCenter = { 
+        ((double)(WINDOW_WIDTH / 2) + state->xPanOffset) / state->xZoomScale,
+        ((double)(WINDOW_HEIGHT / 2) + state->yPanOffset) / state->yZoomScale,
+    };
+
+    state->xZoomScale *= zoomAmount;
+    state->yZoomScale *= zoomAmount;
+
+    pair<double, double> afterCenter = {
+        ((double)(WINDOW_WIDTH / 2) + state->xPanOffset) / state->xZoomScale,
+        ((double)(WINDOW_HEIGHT / 2) + state->yPanOffset) / state->yZoomScale,
+    };
+
+    state->xPanOffset += (beforeCenter.first - afterCenter.first) * state->xZoomScale;
+    state->yPanOffset += (beforeCenter.second - afterCenter.second) * state->yZoomScale;
+}
+
+//Handles panning calculations
+void pan(int* beforeX, int* beforeY, const int* afterX, const int* afterY, fracState* state)
+{
+    state->xPanOffset += (double)(*beforeX - *afterX);
+    state->yPanOffset += (double)(*beforeY - *afterY);
+    *beforeX = *afterX;
+    *beforeY = *afterY;
+}
+
 /*Handles mouse/keyboard events. Will return true if the user has chosen to close the window
 or false otherwise*/
-bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, double* xOffset, double* yOffset, double* xZoom, double* yZoom)
+bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, fracState* state)
 {
     SDL_FlushEvents(SDL_KEYDOWN, SDL_MOUSEMOTION);
     SDL_PollEvent(event);
+
     if (event->type == SDL_QUIT)
         return true;
 
     //Gets the keyboard's state (which keys are active, which aren't)
     const unsigned char* kbState = SDL_GetKeyboardState(NULL);
 
-    //Handles panning events
-    if (*mousePanning)
-    {
-        //Pans if the left mouse button is still being held down
-        if (SDL_GetRelativeMouseState(NULL, NULL) & SDL_BUTTON_LMASK)
-        {
-            *xOffset += (0.001 / *xZoom) * double(mouseCoords->x - event->button.x);
-            *yOffset += (0.001 / *yZoom) * double(mouseCoords->y - event->button.y);
-            mouseCoords->x = event->button.x;
-            mouseCoords->y = event->button.y;
-        }
-        //If the left mouse button is no longer being held down, stop panning
-        else
-            *mousePanning = false;
-    }
     //Runs when user starts panning
-    else if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT)
+    if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT)
     {
         *mousePanning = true;
         mouseCoords->x = event->button.x;
         mouseCoords->y = event->button.y;
     }
 
-    //Handles scroll wheel zoom events 
-    else if (event->type == SDL_MOUSEWHEEL)
+    //Handles panning events. Runs while the user is panning
+    if (*mousePanning)
     {
-        if (event->wheel.y > 0)
-            zoomIn(xZoom, yZoom);
-        else if (event->wheel.y < 0)
-            zoomOut(xZoom, yZoom);
-        event->wheel.y = 0;
+        int newMouseX;
+        int newMouseY;
+
+        //Pans if the left mouse button is still being held down
+        if (SDL_GetMouseState(&newMouseX, &newMouseY) & SDL_BUTTON_LMASK)
+            pan(&mouseCoords->x, &mouseCoords->y, &newMouseX, &newMouseY, state);
+        //If the left mouse button is no longer being held down, stop panning
+        else
+            *mousePanning = false;
+    }
+    //Panning and zooming at the same time seems to cause problems, so zooming
+    //should only be considered if the user is not panning
+    else
+    {
+        //Handles scroll wheel zoom events 
+        if (event->type == SDL_MOUSEWHEEL)
+        {
+            if (event->wheel.y > 0)
+                zoom(state, 1.1);
+            else if (event->wheel.y < 0)
+                zoom(state, 0.9);
+            event->wheel.y = 0;
+        }
+
+        //Handles keyboard zoom events (zoom in with W, zoom out with S)
+        if (kbState[SDL_SCANCODE_W])
+            zoom(state, 1.1);
+        else if (kbState[SDL_SCANCODE_S])
+            zoom(state, 0.9);
     }
 
-    //Handles keyboard zoom events (zoom in with W, zoom out with S)
-    if (kbState[SDL_SCANCODE_W])
-        zoomIn(xZoom, yZoom);
-    else if (kbState[SDL_SCANCODE_S])
-        zoomOut(xZoom, yZoom);
-
     return false;
-}
-
-//Raises the zoom scale
-void zoomIn(double* xZoom, double* yZoom)
-{
-    *xZoom *= 1.1;
-    *yZoom *= 1.1;
-}
-
-//Lowers the zoom scale
-void zoomOut(double* xZoom, double* yZoom)
-{
-    *xZoom *= 0.9;
-    *yZoom *= 0.9;
 }

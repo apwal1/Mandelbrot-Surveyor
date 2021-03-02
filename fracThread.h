@@ -12,30 +12,46 @@ using std::mutex;
 using std::vector;
 using std::atomic;
 using std::condition_variable;
+using std::pair;
+
+//Used to keep track of pan/zoom state of the fractal
+struct fracState {
+	double xZoomScale;
+	double yZoomScale;
+	double xPanOffset;
+	double yPanOffset;
+
+	//Initializes the starting x and y offsets of the fractal
+	fracState(int xPan, int yPan)
+	{
+		xPanOffset = xPan;
+		yPanOffset = yPan;
+		xZoomScale = xPan / -2;
+		yZoomScale = yPan / -1.5;
+	}
+};
 
 class fracThread
 {
 public:
-	fracThread(double width, double height, int iterations, SDL_Point startCoord, SDL_Point endCoord, int** arr);
+	fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int** arr, fracState* state);
 	void makeFractal(int** iterVec);
-	void run(const double* xOffset, const double* yOffset, const double* xZoom, const double* yZoom);
+	void run();
 	void join();
-	bool isThreadDone();
+	void waitUntilDone();
 private:
 	void coordsToComplex(const int* x, const int* y, complex<double>* result);
-	int getNumIters(const complex<double>* complexNum);
+	void getNumIters(const complex<double>* complexNum, int* iters);
 	thread subThread;
 	condition_variable start;
 	const double windowWidth = 0;
 	const double windowHeight = 0;
 	const double maxIters = 0;
-	const SDL_Point startPoint = { 0, 0 };
-	const SDL_Point endPoint = { 0, 0 };
+	const pair<SDL_Point, SDL_Point> sectionBounds = { { 0, 0 }, { 0, 0 } };
 	const double* xOffset;
 	const double* yOffset;
 	const double* xZoom;
 	const double* yZoom;
 	atomic<bool> running = true;
-	atomic<bool> done = false;
 	mutex mx;
 };

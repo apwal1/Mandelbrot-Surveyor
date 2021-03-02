@@ -2,8 +2,14 @@
 
 using std::unique_lock;
 
-fracThread::fracThread(double width, double height, int iterations, SDL_Point startCoord, SDL_Point endCoord, int** arr) : windowWidth(width), windowHeight(height), maxIters(iterations), startPoint(startCoord), endPoint(endCoord)
+fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int** arr, fracState* state)
+    : windowWidth(double(width)), windowHeight(double(height)), maxIters(iterations), sectionBounds(bounds)
 {
+    xOffset = &state->xPanOffset;
+    yOffset = &state->yPanOffset;
+    xZoom = &state->xZoomScale;
+    yZoom = &state->yZoomScale;
+
     subThread = thread(&fracThread::makeFractal, this, arr);
 }
 
@@ -11,41 +17,36 @@ fracThread::fracThread(double width, double height, int iterations, SDL_Point st
 void fracThread::makeFractal(int** iterVec)
 {
     complex<double> complexPixel;
-    int iterations;
+    int iterations = 0;
 
     while (running)
     {
         unique_lock<mutex> lock(mx);
         start.wait(lock);
 
-        for (int y = startPoint.y; y < endPoint.y; y++)
+        for (int y = sectionBounds.first.y; y < sectionBounds.second.y; y++)
         {
-            for (int x = startPoint.x; x < endPoint.x; x++)
+            for (int x = sectionBounds.first.x; x < sectionBounds.second.x; x++)
             {
                 /*Creates a complex number based on the coordinates of whichever pixel we are
                 drawing and calculates how many iterations were needed to decide whether it is
                 in the mandelbrot set or not*/
                 coordsToComplex(&x, &y, &complexPixel);
-                iterVec[x][y] = getNumIters(&complexPixel);
+                getNumIters(&complexPixel, &iterations);
+                iterVec[x][y] = iterations;
             }
         }
-        done = true;
     }
 }
 
 //Lets the thread calculate its portion of the current frame using the arguments which represent the current pan/zoom state
-void fracThread::run(const double* xOffset, const double* yOffset, const double* xZoom, const double* yZoom)
+void fracThread::run()
 {
     unique_lock<mutex>(mx);
-    this->xOffset = xOffset;
-    this->yOffset = yOffset;
-    this->xZoom = xZoom;
-    this->yZoom = yZoom;
-    done = false;
     start.notify_one();
 }
 
-//Hangs until the thread exits
+//Hangs until thread exits
 void fracThread::join()
 {
     running = false;
@@ -53,26 +54,27 @@ void fracThread::join()
 	subThread.join();
 }
 
-//Checks if the thread is done with the current frame
-bool fracThread::isThreadDone()
+//Hangs until the thread is done calculating its portion of the frame
+void fracThread::waitUntilDone()
 {
-    return done;
+    //We will know the thread is done once it releases the mutex. This lock will be released once the unique_lock is deallocated
+    unique_lock<mutex> lock(mx);
 }
 
-//Converts a pixel's coordinates to a complex number (result)
+//Converts a pixel's coordinates to a complex number, which will be stored in result
 void fracThread::coordsToComplex(const int* x, const int* y, complex<double>* result)
 {
-    result->real(*xOffset + (*x / windowWidth) / *xZoom);
-    result->imag(*yOffset + (*y / windowHeight) / *yZoom);
+    result->real(((double)*x + *xOffset) / *xZoom);
+    result->imag(((double)*y + *yOffset) / *yZoom);
 }
 
 /*Calculates the number of iterations required to determine whether the passed complex number is
-in the mandelbrot set or not*/
-int fracThread::getNumIters(const complex<double>* complexNum)
+in the mandelbrot set or not. The result will be placed in the passed int* iters*/
+void fracThread::getNumIters(const complex<double>* complexNum, int* iters)
 {
-    int iters = 0;
     complex<double> z = 0;
-    for (; (z.imag() * z.imag()) + (z.real() * z.real()) <= 4 && iters < maxIters; iters++)
+    /*(z.imag() * z.imag()) + (z.real() * z.real()) <= 4 is equivalent to abs(z) <= 2
+    While the former may look more complicated, it is about twice as efficient as the latter*/
+    for (*iters = 0; (z.imag() * z.imag()) + (z.real() * z.real()) <= 4 && *iters < maxIters; (*iters)++)
         z = z * z + *complexNum;
-    return iters;
 }
