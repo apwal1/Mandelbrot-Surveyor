@@ -5,6 +5,7 @@
 #include <mutex>
 #include <vector>
 #include <complex>
+#include "fracState.h"
 
 using std::complex;
 using std::thread;
@@ -14,28 +15,11 @@ using std::atomic;
 using std::condition_variable;
 using std::pair;
 
-//Used to keep track of pan/zoom state of the fractal
-struct fracState {
-	double xZoomScale;
-	double yZoomScale;
-	double xPanOffset;
-	double yPanOffset;
-
-	//Initializes the starting x and y offsets of the fractal
-	fracState(int xPan, int yPan)
-	{
-		xPanOffset = xPan;
-		yPanOffset = yPan;
-		xZoomScale = xPan / -2;
-		yZoomScale = yPan / -1.5;
-	}
-};
-
 class fracThread
 {
 public:
-	fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int** arr, fracState* state);
-	void makeFractal(int** iterVec);
+	fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int* arr, fracState* state);
+	void makeFractal(int* resultArr);
 	void run();
 	void join();
 	void waitUntilDone();

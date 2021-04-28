@@ -2,7 +2,7 @@
 
 using std::unique_lock;
 
-fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int** arr, fracState* state)
+fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int* arr, fracState* state)
     : windowWidth(double(width)), windowHeight(double(height)), maxIters(iterations), sectionBounds(bounds)
 {
     xOffset = &state->xPanOffset;
@@ -14,7 +14,7 @@ fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SD
 }
 
 //Calculates the thread's portion of the fractal
-void fracThread::makeFractal(int** iterVec)
+void fracThread::makeFractal(int* resultArr)
 {
     complex<double> complexPixel;
     int iterations = 0;
@@ -33,7 +33,7 @@ void fracThread::makeFractal(int** iterVec)
                 in the mandelbrot set or not*/
                 coordsToComplex(&x, &y, &complexPixel);
                 getNumIters(&complexPixel, &iterations);
-                iterVec[x][y] = iterations;
+                resultArr[y * WINDOW_WIDTH + x] = iterations;
             }
         }
     }
