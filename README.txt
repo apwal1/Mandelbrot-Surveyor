@@ -4,7 +4,7 @@ As of now it features panning and zooming capabilities, but many more features a
 Current features:
   - Panning (hold left click and drag the fractal)
   - Zooming (using W and S keys or mouse wheel)
-  - GPU rendering (don't try running this project on a device without a CUDA-capable GPU; you will definitely run into problems)
+  - GPU rendering using CUDA C++ (don't try running this project on a device without a CUDA-capable GPU; you will definitely run into problems)
   - CPU rendering (you can switch between GPU and CPU rendering with the M key)
 
 Planned future features:
