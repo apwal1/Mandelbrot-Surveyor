@@ -1,5 +1,4 @@
-Mandelbrot Surveyor is a multithreaded Mandelbrot fractal rendering program written in C++ using the SDL2 library.
-As of now it features panning and zooming capabilities, but many more features are planned for future updates.
+Mandelbrot Surveyor is a multithreaded Mandelbrot fractal rendering program written in C++ using the SDL2 library and CUDA C++.
 
 Current features:
   - Panning (hold left click and drag the fractal)
