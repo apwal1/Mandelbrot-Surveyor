@@ -13,6 +13,7 @@ Planned future features:
   - Screenshots
   - Saving and loading of specific locations within the fractal
   - Cross-platform capabilities
+  - Detection of CUDA-capable GPU and dynamically loading cuda DLL so that the project can be run on devices without CUDA
 
 Potential future features:
   - Dynamic rotation of the Mandelbrot
