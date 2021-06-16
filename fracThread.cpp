@@ -1,8 +1,9 @@
 #include "fracThread.h"
+#include "hsvrgb.h"
 
 using std::unique_lock;
 
-fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int* arr, fracState* state)
+fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, fracState* state)
     : windowWidth(double(width)), windowHeight(double(height)), maxIters(iterations), sectionBounds(bounds)
 {
     xOffset = &state->xPanOffset;
@@ -14,10 +15,11 @@ fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SD
 }
 
 //Calculates the thread's portion of the fractal
-void fracThread::makeFractal(int* resultArr)
+void fracThread::makeFractal(RGB* resultArr)
 {
+    float h, s = 0.7, v = 1.0, r, g, b;
     complex<double> complexPixel;
-    int iterations = 0;
+    double smooth = 0;
 
     while (running)
     {
@@ -32,8 +34,19 @@ void fracThread::makeFractal(int* resultArr)
                 drawing and calculates how many iterations were needed to decide whether it is
                 in the mandelbrot set or not*/
                 coordsToComplex(&x, &y, &complexPixel);
-                getNumIters(&complexPixel, &iterations);
-                resultArr[y * WINDOW_WIDTH + x] = iterations;
+                getNumIters(&complexPixel, &smooth);
+
+                if (smooth == -1.0)
+                    r = g = b = 0;
+                else
+                {
+                    h = smooth + 255;
+                    HSVtoRGB(r, g, b, h, s, v);
+                }
+
+                resultArr[y * WINDOW_WIDTH + x].r = r * 255;
+                resultArr[y * WINDOW_WIDTH + x].g = g * 255;
+                resultArr[y * WINDOW_WIDTH + x].b = b * 255;
             }
         }
     }
@@ -70,11 +83,24 @@ void fracThread::coordsToComplex(const int* x, const int* y, complex<double>* re
 
 /*Calculates the number of iterations required to determine whether the passed complex number is
 in the mandelbrot set or not. The result will be placed in the passed int* iters*/
-void fracThread::getNumIters(const complex<double>* complexNum, int* iters)
+void fracThread::getNumIters(const complex<double>* complexNum, double* smooth)
 {
+    int iters = 0;
     complex<double> z = 0;
     /*(z.imag() * z.imag()) + (z.real() * z.real()) <= 4 is equivalent to abs(z) <= 2
     While the former may look more complicated, it is about twice as efficient as the latter*/
-    for (*iters = 0; (z.imag() * z.imag()) + (z.real() * z.real()) <= 4 && *iters < maxIters; (*iters)++)
+    for (; (z.imag() * z.imag()) + (z.real() * z.real()) <= 4 && iters < maxIters; iters++)
         z = z * z + *complexNum;
+    iters == maxIters ? *smooth = -1.0 : calcSmoothColor(&z, &iters, smooth);
+}
+
+//Uses the mandelbrot smooth-coloring algorithm (https://stackoverflow.com/questions/369438/smooth-spectrum-for-mandelbrot-set-rendering)
+//to calculate a value between 0 and 1 which will be used to determine the color of a pixel
+void fracThread::calcSmoothColor(const complex<double>* complexNum, const int* iters, double* smooth)
+{
+    //Again, sqrt((complexNum->imag() * complexNum->imag()) + (complexNum->real() * complexNum->real()))
+    //is much faster than abs(z) but gives the same result
+    double complexAbs = sqrt((complexNum->imag() * complexNum->imag()) + (complexNum->real() * complexNum->real()));
+    double complexDoubleLog = log10(log10(complexAbs));
+    *smooth = *iters + 1 - (complexDoubleLog / log10(2));
 }

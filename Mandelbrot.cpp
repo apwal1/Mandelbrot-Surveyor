@@ -6,6 +6,8 @@
 #include "GPUCalc.cuh"
 #include <SDL.h>
 
+#define FPS_CAP 60
+
 //Number of GPU blocks
 #define NUM_BLOCKS 20
 //Number of GPU threads per block
@@ -29,8 +31,9 @@ void SDLError(string errorMsg, bool* errorFlag);
 
 int main(int argc, char* argv[]) {
     SDL_Event event;
-    SDL_Renderer* renderer;
     SDL_Window* window;
+    SDL_Surface* fracSurface;
+    SDL_Surface* windowSurface;
 
     //Used to help keep track of panning
     bool mousePanning = false;
@@ -42,14 +45,16 @@ int main(int argc, char* argv[]) {
 
     fracThread* threads[NUM_CPU_THREADS];
 
+    RGB temp;
+
     //This will be true if there was an error in the initialization of the SDL window/renderer
     bool initError = false;
 
-    //Initializes the fractal to the middle of the screen
+    //Initializes the fractal to the middle of the screen in GPU rendering mode
     state.initialize(-WINDOW_WIDTH / 2, -WINDOW_HEIGHT / 2, GPU);
 
     //Creating a 1d array of ints
-    int* result = new int [WINDOW_WIDTH * WINDOW_HEIGHT];
+    RGB* result = new RGB [WINDOW_WIDTH * WINDOW_HEIGHT];
 
     //Initializes our array of fracThreads
     for (int i = 0; i < NUM_CPU_THREADS; i++)
@@ -61,8 +66,8 @@ int main(int argc, char* argv[]) {
     }
 
     //Creating 1d array of ints in GPU mem
-    int* d_result;
-    cudaMalloc((void**)&d_result, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(int));
+    RGB* d_result;
+    cudaMalloc((void**)&d_result, WINDOW_WIDTH * WINDOW_HEIGHT * sizeof(RGB));
 
     //Initializes SDL video and checks for errors
     if (SDL_Init(SDL_INIT_VIDEO) != 0)
@@ -70,11 +75,8 @@ int main(int argc, char* argv[]) {
     //Initializes SDL window and checks for errors
     if ((window = SDL_CreateWindow("Mandelbrot Surveyor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, 0)) == NULL)
         SDLError("Error during SDL_CreateWindow", &initError);
-    //Initializes SDL renderer and checks for errors
-    if ((renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED)) == NULL)
-        SDLError("Error during SDL_CreateRenderer", &initError);
 
-    int temp = 0;
+    windowSurface = SDL_GetWindowSurface(window);
 
     if (!initError)
     {
@@ -84,23 +86,19 @@ int main(int argc, char* argv[]) {
             //If we are rendering the fractal in GPU mode, this runs
             if (state.calcMethod == GPU)
             {
-                SDL_SetWindowTitle(window, "Mandelbrot Surveyor - GPU");
-
                 //Copy the state of the fractal to GPU mem
                 cudaMemcpy(d_state, &state, sizeof(fracState), cudaMemcpyHostToDevice);
 
                 //Run the GPU calculations and wait for all threads to finish
-                makeFracGPU << <NUM_BLOCKS, NUM_GPU_THREADS >> > (d_result, d_state);
+                makeFracGPU<<<NUM_BLOCKS, NUM_GPU_THREADS>>> (d_result, d_state);
                 cudaDeviceSynchronize();
 
                 //Copy results back from GPU mem
-                cudaMemcpy(result, d_result, WINDOW_HEIGHT * WINDOW_WIDTH * sizeof(int), cudaMemcpyDeviceToHost);
+                cudaMemcpy(result, d_result, WINDOW_HEIGHT * WINDOW_WIDTH * sizeof(RGB), cudaMemcpyDeviceToHost);
             }
             //If we are rendering the fractal in CPU mode, this runs
             else
             {
-                SDL_SetWindowTitle(window, "Mandelbrot Surveyor - CPU");
-
                 //Starts the threads
                 for (auto& i : threads)
                     i->run();
@@ -109,55 +107,36 @@ int main(int argc, char* argv[]) {
                 for (auto& i : threads)
                     i->waitUntilDone();
             }
-            //Prints performance metric and current state of fractal
-            std::chrono::duration<double> time = std::chrono::high_resolution_clock::now() - start;
-            cout << "Created and copied result array in " << time.count() << " seconds\n";
-            cout << "Zoom X: " << (double)(state.xZoomScale / (WINDOW_WIDTH / 4)) << " Zoom Y: " << (double)(state.yZoomScale / (WINDOW_HEIGHT / 3)) << endl;
-            cout << "Pan X: " << state.xPanOffset << " Pan Y: " << state.yPanOffset << endl;
 
-            //Determines the color of each pixel and draws it to the screen
-            for (int x = 0; x < WINDOW_WIDTH; x++)
-                for (int y = 0; y < WINDOW_HEIGHT; y++)
-                {
-                    temp = result[y * WINDOW_WIDTH + x];
-                    if (temp == MAX_ITER)
-                        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-                    else
-                    {
-                        //Makes the fractal look nice (color choosing)
-                        switch (temp % 16)
-                        {
-                        //These values were taken from https://stackoverflow.com/questions/16500656/which-color-gradient-is-used-to-color-mandelbrot-in-wikipedia
-                        case 0: SDL_SetRenderDrawColor(renderer, 66, 30, 15, 255); break;
-                        case 1: SDL_SetRenderDrawColor(renderer, 25, 7, 26, 255); break;
-                        case 2: SDL_SetRenderDrawColor(renderer, 9, 1, 47, 255); break;
-                        case 3: SDL_SetRenderDrawColor(renderer, 4, 4, 73, 255); break;
-                        case 4: SDL_SetRenderDrawColor(renderer, 0, 7, 100, 255); break;
-                        case 5: SDL_SetRenderDrawColor(renderer, 12, 44, 138, 255); break;
-                        case 6: SDL_SetRenderDrawColor(renderer, 24, 82, 177, 255); break;
-                        case 7: SDL_SetRenderDrawColor(renderer, 57, 125, 209, 255); break;
-                        case 8: SDL_SetRenderDrawColor(renderer, 134, 181, 229, 255); break;
-                        case 9: SDL_SetRenderDrawColor(renderer, 211, 236, 248, 255); break;
-                        case 10: SDL_SetRenderDrawColor(renderer, 241, 233, 191, 255); break;
-                        case 11: SDL_SetRenderDrawColor(renderer, 248, 201, 95, 255); break;
-                        case 12: SDL_SetRenderDrawColor(renderer, 255, 170, 0, 255); break;
-                        case 13: SDL_SetRenderDrawColor(renderer, 204, 128, 0, 255); break;
-                        case 14: SDL_SetRenderDrawColor(renderer, 153, 87, 0, 255); break;
-                        case 15: SDL_SetRenderDrawColor(renderer, 106, 52, 3, 255);
-                        }
-                    }
-                    SDL_RenderDrawPoint(renderer, x, y);
-                }
-            SDL_RenderPresent(renderer);
+            //Creates a surface out of our RGB result array and displays it on the window
+            fracSurface = SDL_CreateRGBSurfaceFrom((void*) result, WINDOW_WIDTH, WINDOW_HEIGHT, 24, WINDOW_WIDTH * 3, 0x0000FF, 0x00FF00, 0xFF0000, 0);
+            SDL_BlitSurface(fracSurface, NULL, windowSurface, NULL);
+            SDL_UpdateWindowSurface(window);
+            SDL_FreeSurface(fracSurface);
+
+            //Caps the FPS at FPS_CAP
+            std::chrono::duration<double> time = std::chrono::high_resolution_clock::now() - start;
+            if (floor(1 / time.count()) > FPS_CAP)
+            {
+                state.fps = 1 / (1 / (double)FPS_CAP) - time.count();
+                std::this_thread::sleep_for(std::chrono::milliseconds((int)floor(((1 / (double)FPS_CAP) - time.count()) * 1000)));
+            }
+            else
+                state.fps = floor(1 / time.count());
+
+            //Prints performance metric and fractal state
+            cout << "Rendered frame in " << time.count() << " seconds. " << state.fps << "fps\nMode: ";
+            state.calcMethod == GPU ? cout << "GPU" : cout << "CPU";
+            cout << "\tZoom Scale: " << (double)(state.yZoomScale / (WINDOW_HEIGHT / 3)) << endl;
+            cout << "Pan X: " << state.xPanOffset << "\tPan Y: " << state.yPanOffset << endl;
         }
     }
 
     //Cleaning up SDL
-    SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    //Cleaning up threads
+    //Cleaning up CPU threads
     for (int i = 0; i < NUM_CPU_THREADS; i++)
     {
         threads[i]->join();
@@ -210,10 +189,11 @@ void pan(int* beforeX, int* beforeY, const int* afterX, const int* afterY, fracS
 or false otherwise*/
 bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, fracState* state)
 {
-    SDL_FlushEvents(SDL_KEYUP, SDL_MOUSEMOTION);
+    SDL_FlushEvents(SDL_KEYDOWN, SDL_MOUSEMOTION);
     SDL_PollEvent(event);
+    SDL_FlushEvent(SDL_MOUSEWHEEL);
 
-    if (event->type == SDL_QUIT)
+    if (event->type == SDL_QUIT || event->type == SDL_APP_TERMINATING)
         return true;
 
     //Holds the mouse coordinates
@@ -231,22 +211,21 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
         mouseCoords->y = event->button.y;
     }
 
+    if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT)
+        *mousePanning = false;
+
     //Handles panning events. Runs while the user is panning
     if (*mousePanning)
-    {
-        //Pans if the left mouse button is still being held down
-        if (mouseState & SDL_BUTTON_LMASK)
-            pan(&mouseCoords->x, &mouseCoords->y, &mouseX, &mouseY, state);
-        //If the left mouse button is no longer being held down, stop panning
-        else
-            *mousePanning = false;
-    }
-    //Panning and zooming at the same time seems to cause problems, so zooming
-    //should only be considered if the user is not panning
+        pan(&mouseCoords->x, &mouseCoords->y, &mouseX, &mouseY, state);
     else
     {
+        //Handles keyboard zoom events (zoom in with W, zoom out with S)
+        if (kbState[SDL_SCANCODE_W] && event->type != SDL_MOUSEWHEEL)
+            zoom(state, 1.05, mouseX, mouseY);
+        else if (kbState[SDL_SCANCODE_S] && event->type != SDL_MOUSEWHEEL)
+            zoom(state, 0.95, mouseX, mouseY);
         //Handles scroll wheel zoom events 
-        if (event->type == SDL_MOUSEWHEEL)
+        else if (event->type == SDL_MOUSEWHEEL)
         {
             if (event->wheel.y > 0)
                 zoom(state, 1.1, mouseX, mouseY);
@@ -254,21 +233,10 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
                 zoom(state, 0.9, mouseX, mouseY);
             event->wheel.y = 0;
         }
-
-        //Handles keyboard zoom events (zoom in with W, zoom out with S)
-        if (kbState[SDL_SCANCODE_W])
-            zoom(state, 1.1, mouseX, mouseY);
-        else if (kbState[SDL_SCANCODE_S])
-            zoom(state, 0.9, mouseX, mouseY);
     }
-    //Handles keyboard render method events (switch render method between CPU and GPU with M key)
+    //Responds to the M key being pressed by switching render method
     if (kbState[SDL_SCANCODE_M])
-    {
-        if (state->calcMethod == CPU)
-            state->calcMethod = GPU;
-        else
-            state->calcMethod = CPU;
-    }
+        state->calcMethod == CPU ? state->calcMethod = GPU : state->calcMethod = CPU;
 
     return false;
 }
