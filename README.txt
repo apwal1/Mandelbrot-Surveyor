@@ -5,9 +5,9 @@ Current features:
   - Zooming (using W and S keys or mouse wheel)
   - GPU rendering using CUDA C++ (don't try running this project on a device without a CUDA-capable GPU; you will definitely run into problems)
   - CPU rendering (you can switch between GPU and CPU rendering with the M key)
+  - Smooth coloring algorithm
 
 Planned future features:
-  - Smooth coloring algorithm
   - Dynamic color-palette choosing
   - Screenshots
   - Saving and loading of specific locations within the fractal
