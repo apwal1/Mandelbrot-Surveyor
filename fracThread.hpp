@@ -5,7 +5,7 @@
 #include <mutex>
 #include <vector>
 #include <complex>
-#include "fracState.h"
+#include "fracState.hpp"
 
 using std::complex;
 using std::thread;
@@ -18,14 +18,15 @@ using std::pair;
 class fracThread
 {
 public:
-	fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, int* arr, fracState* state);
-	void makeFractal(int* resultArr);
+	fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, fracState* state);
+	void makeFractal(RGB* resultArr);
 	void run();
 	void join();
 	void waitUntilDone();
 private:
 	void coordsToComplex(const int* x, const int* y, complex<double>* result);
-	void getNumIters(const complex<double>* complexNum, int* iters);
+	void getNumIters(const complex<double>* complexNum, double* smooth);
+	void calcSmoothColor(const complex<double>* complexNum, const int* iters, double* smooth);
 	thread subThread;
 	condition_variable start;
 	const double windowWidth = 0;
