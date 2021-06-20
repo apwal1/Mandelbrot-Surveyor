@@ -2,7 +2,7 @@
 #include <complex>
 #include <chrono>
 #include <vector>
-#include "fracThread.h"
+#include "fracThread.hpp"
 #include "GPUCalc.cuh"
 #include <SDL.h>
 
@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
             SDL_UpdateWindowSurface(window);
             SDL_FreeSurface(fracSurface);
 
-            //Caps the FPS at FPS_CAP
+            //Measures FPS and caps it at FPS_CAP by making this thread sleep
             std::chrono::duration<double> time = std::chrono::high_resolution_clock::now() - start;
             if (floor(1 / time.count()) > FPS_CAP)
             {
@@ -211,6 +211,7 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
         mouseCoords->y = event->button.y;
     }
 
+    //Runs when user stops panning
     if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT)
         *mousePanning = false;
 
@@ -221,9 +222,9 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
     {
         //Handles keyboard zoom events (zoom in with W, zoom out with S)
         if (kbState[SDL_SCANCODE_W] && event->type != SDL_MOUSEWHEEL)
-            zoom(state, 1.05, mouseX, mouseY);
+            zoom(state, 1.05 - (state->fps / (21 * FPS_CAP)), mouseX, mouseY);
         else if (kbState[SDL_SCANCODE_S] && event->type != SDL_MOUSEWHEEL)
-            zoom(state, 0.95, mouseX, mouseY);
+            zoom(state, 0.95 + (state->fps / (21 * FPS_CAP)), mouseX, mouseY);
         //Handles scroll wheel zoom events 
         else if (event->type == SDL_MOUSEWHEEL)
         {

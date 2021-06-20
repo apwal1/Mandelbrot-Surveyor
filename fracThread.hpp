@@ -25,7 +25,7 @@ public:
 	void waitUntilDone();
 private:
 	void coordsToComplex(const int* x, const int* y, complex<double>* result);
-	void getNumIters(const complex<double>* complexNum, double* smooth);
+	void getSmoothColor(const complex<double>* complexNum, double* smooth);
 	void calcSmoothColor(const complex<double>* complexNum, const int* iters, double* smooth);
 	thread subThread;
 	condition_variable start;

@@ -10,9 +10,10 @@ void coordsToComplexGPU(const int* x, const int* y, const fracState* state, cuDo
 }
 
 /*Calculates the number of iterations required to determine whether the passed complex number is
-in the mandelbrot set or not. The result will be placed in the passed int* iters*/
+in the mandelbrot set or not. The result will be placed in the passed double* smooth and will be -1.0
+if the pixel is in the mandelbrot set and should be colored black*/
 __device__
-void getNumItersGPU(const cuDoubleComplex* complexNum, double* smooth)
+void getSmoothColorGPU(const cuDoubleComplex* complexNum, double* smooth)
 {
     int iters = 0;
     cuDoubleComplex z = make_cuDoubleComplex(0, 0);
@@ -31,7 +32,7 @@ void getNumItersGPU(const cuDoubleComplex* complexNum, double* smooth)
 __device__
 void calcSmoothColorGPU(const cuDoubleComplex* complexNum, const int* iters, double* smooth)
 {
-    //Again, sqrt((complexNum->x * complexNum->x) + (complexNum->y * complexNum->y))
+    //sqrt((complexNum->x * complexNum->x) + (complexNum->y * complexNum->y))
     //is much faster than abs(z) but gives the same result
     double complexAbs = sqrt((complexNum->x * complexNum->x) + (complexNum->y * complexNum->y));
     double complexDoubleLog = log10(log10(complexAbs));
@@ -53,7 +54,7 @@ void makeFracGPU(RGB* resultArr, const fracState* state)
         for (int x = threadIdx.x * sectionWidth; x < (threadIdx.x + 1) * sectionWidth; x++)
         {
             coordsToComplexGPU(&x, &y, state, &complexPixel);
-            getNumItersGPU(&complexPixel, &smooth);
+            getSmoothColorGPU(&complexPixel, &smooth);
 
             if (smooth == -1.0)
                 r = g = b = 0;

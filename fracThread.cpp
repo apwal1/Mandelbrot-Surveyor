@@ -1,4 +1,4 @@
-#include "fracThread.h"
+#include "fracThread.hpp"
 #include "hsvrgb.h"
 
 using std::unique_lock;
@@ -34,7 +34,7 @@ void fracThread::makeFractal(RGB* resultArr)
                 drawing and calculates how many iterations were needed to decide whether it is
                 in the mandelbrot set or not*/
                 coordsToComplex(&x, &y, &complexPixel);
-                getNumIters(&complexPixel, &smooth);
+                getSmoothColor(&complexPixel, &smooth);
 
                 if (smooth == -1.0)
                     r = g = b = 0;
@@ -82,8 +82,9 @@ void fracThread::coordsToComplex(const int* x, const int* y, complex<double>* re
 }
 
 /*Calculates the number of iterations required to determine whether the passed complex number is
-in the mandelbrot set or not. The result will be placed in the passed int* iters*/
-void fracThread::getNumIters(const complex<double>* complexNum, double* smooth)
+in the mandelbrot set or not. The result will be placed in the passed double* smooth and will be -1.0
+if the pixel is in the mandelbrot set and should be colored black*/
+void fracThread::getSmoothColor(const complex<double>* complexNum, double* smooth)
 {
     int iters = 0;
     complex<double> z = 0;
@@ -98,7 +99,7 @@ void fracThread::getNumIters(const complex<double>* complexNum, double* smooth)
 //to calculate a value between 0 and 1 which will be used to determine the color of a pixel
 void fracThread::calcSmoothColor(const complex<double>* complexNum, const int* iters, double* smooth)
 {
-    //Again, sqrt((complexNum->imag() * complexNum->imag()) + (complexNum->real() * complexNum->real()))
+    //sqrt((complexNum->imag() * complexNum->imag()) + (complexNum->real() * complexNum->real()))
     //is much faster than abs(z) but gives the same result
     double complexAbs = sqrt((complexNum->imag() * complexNum->imag()) + (complexNum->real() * complexNum->real()));
     double complexDoubleLog = log10(log10(complexAbs));
