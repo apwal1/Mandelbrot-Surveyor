@@ -3,7 +3,7 @@
 
 using std::unique_lock;
 
-fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, fracState* state)
+fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, const fracState* state)
     : windowWidth(double(width)), windowHeight(double(height)), maxIters(iterations), sectionBounds(bounds)
 {
     xOffset = &state->xPanOffset;
@@ -31,8 +31,7 @@ void fracThread::makeFractal(RGB* resultArr)
             for (int x = sectionBounds.first.x; x < sectionBounds.second.x; x++)
             {
                 /*Creates a complex number based on the coordinates of whichever pixel we are
-                drawing and calculates how many iterations were needed to decide whether it is
-                in the mandelbrot set or not*/
+                drawing and calculates the color the pixel should be*/
                 coordsToComplex(&x, &y, &complexPixel);
                 getSmoothColor(&complexPixel, &smooth);
 
@@ -44,6 +43,7 @@ void fracThread::makeFractal(RGB* resultArr)
                     HSVtoRGB(r, g, b, h, s, v);
                 }
 
+                //Saves our result into the 1 dimensional result array that we are using to mimic a 2d array
                 resultArr[y * WINDOW_WIDTH + x].r = r * 255;
                 resultArr[y * WINDOW_WIDTH + x].g = g * 255;
                 resultArr[y * WINDOW_WIDTH + x].b = b * 255;
@@ -72,6 +72,12 @@ void fracThread::waitUntilDone()
 {
     //We will know the thread is done once it releases the mutex. This lock will be released once the unique_lock is deallocated
     unique_lock<mutex> lock(mx);
+}
+
+//Returns true if the thread is able to be joined, false otherwise
+bool fracThread::joinable()
+{
+    return subThread.joinable();
 }
 
 //Converts a pixel's coordinates to a complex number, which will be stored in result

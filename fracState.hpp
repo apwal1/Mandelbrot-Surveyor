@@ -20,7 +20,7 @@ struct fracState {
     RENDERTYPE calcMethod;
     int fps;
 
-    //Initializes the starting x and y offsets of the fractal
+    //Initializes the starting x and y offsets of the fractal, as well as the zoom scale based on those offsets
     void initialize(int xPan, int yPan, enum RENDERTYPE method)
     {
         xPanOffset = xPan;

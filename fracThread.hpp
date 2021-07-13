@@ -18,12 +18,13 @@ using std::pair;
 class fracThread
 {
 public:
-	fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, fracState* state);
-	void makeFractal(RGB* resultArr);
+	fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, const fracState* state);
 	void run();
 	void join();
 	void waitUntilDone();
+	bool joinable();
 private:
+	void makeFractal(RGB* resultArr);
 	void coordsToComplex(const int* x, const int* y, complex<double>* result);
 	void getSmoothColor(const complex<double>* complexNum, double* smooth);
 	void calcSmoothColor(const complex<double>* complexNum, const int* iters, double* smooth);

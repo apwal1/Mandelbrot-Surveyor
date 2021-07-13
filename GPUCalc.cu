@@ -9,9 +9,10 @@ void coordsToComplexGPU(const int* x, const int* y, const fracState* state, cuDo
     result->y = ((double)*y + state->yPanOffset) / state->yZoomScale;
 }
 
-/*Calculates the number of iterations required to determine whether the passed complex number is
-in the mandelbrot set or not. The result will be placed in the passed double* smooth and will be -1.0
-if the pixel is in the mandelbrot set and should be colored black*/
+/*Calculates the number of iterations required to determine whether the passed complex number is 
+in the mandelbrot set or not and calculates a smooth color based on the number of iterations. 
+The result will be placed in the passed double* smooth and will be -1.0 if the pixel is in the 
+mandelbrot set and should be colored black*/
 __device__
 void getSmoothColorGPU(const cuDoubleComplex* complexNum, double* smooth)
 {

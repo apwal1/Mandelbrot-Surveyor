@@ -2,11 +2,11 @@
 #include <complex>
 #include <chrono>
 #include <vector>
-#include "fracThread.hpp"
+#include "fracThreadPool.hpp"
 #include "GPUCalc.cuh"
 #include <SDL.h>
 
-#define FPS_CAP 60
+#define FPS_CAP 30
 
 //Number of GPU blocks
 #define NUM_BLOCKS 20
@@ -24,7 +24,7 @@ using std::vector;
 using std::atomic;
 using std::pair;
 
-bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, fracState* state);
+bool eventHandler(SDL_Event* event, SDL_Point* mouseCoords, fracState* state);
 void zoom(fracState* state, double zoomAmount, int mouseX, int mouseY);
 void pan(int* beforeX, int* beforeY, const int* afterX, const int* afterY, fracState* state);
 void SDLError(string errorMsg, bool* errorFlag);
@@ -36,16 +36,11 @@ int main(int argc, char* argv[]) {
     SDL_Surface* windowSurface;
 
     //Used to help keep track of panning
-    bool mousePanning = false;
     SDL_Point mousePanningCoords;
 
     fracState state;
     fracState* d_state;
     cudaMalloc((void**)&d_state, sizeof(fracState));
-
-    fracThread* threads[NUM_CPU_THREADS];
-
-    RGB temp;
 
     //This will be true if there was an error in the initialization of the SDL window/renderer
     bool initError = false;
@@ -56,14 +51,9 @@ int main(int argc, char* argv[]) {
     //Creating a 1d array of ints
     RGB* result = new RGB [WINDOW_WIDTH * WINDOW_HEIGHT];
 
-    //Initializes our array of fracThreads
-    for (int i = 0; i < NUM_CPU_THREADS; i++)
-    {
-        SDL_Point start = { i * WINDOW_WIDTH / NUM_CPU_THREADS, 0 };
-        SDL_Point end = { (i + 1) * WINDOW_WIDTH / NUM_CPU_THREADS, WINDOW_HEIGHT };
-        pair<SDL_Point, SDL_Point> bounds(start, end);
-        threads[i] = new fracThread(WINDOW_WIDTH, WINDOW_HEIGHT, MAX_ITER, bounds, result, &state);
-    }
+    //Creates and initializes our CPU thread pool. NOTE: The threads must be stopped BEFORE
+    //the result array is deallocated, otherwise the threads will cause an access violation exception
+    fracThreadPool threadPool(NUM_CPU_THREADS, result, &state);
 
     //Creating 1d array of ints in GPU mem
     RGB* d_result;
@@ -80,7 +70,7 @@ int main(int argc, char* argv[]) {
 
     if (!initError)
     {
-        while (!eventHandler(&event, &mousePanning, &mousePanningCoords, &state))
+        while (!eventHandler(&event, &mousePanningCoords, &state))
         {
             auto start = std::chrono::high_resolution_clock::now();
             //If we are rendering the fractal in GPU mode, this runs
@@ -98,15 +88,7 @@ int main(int argc, char* argv[]) {
             }
             //If we are rendering the fractal in CPU mode, this runs
             else
-            {
-                //Starts the threads
-                for (auto& i : threads)
-                    i->run();
-
-                //Waits for every thread to finish its portion of the frame
-                for (auto& i : threads)
-                    i->waitUntilDone();
-            }
+                threadPool.calcFrame();
 
             //Creates a surface out of our RGB result array and displays it on the window
             fracSurface = SDL_CreateRGBSurfaceFrom((void*) result, WINDOW_WIDTH, WINDOW_HEIGHT, 24, WINDOW_WIDTH * 3, 0x0000FF, 0x00FF00, 0xFF0000, 0);
@@ -118,7 +100,7 @@ int main(int argc, char* argv[]) {
             std::chrono::duration<double> time = std::chrono::high_resolution_clock::now() - start;
             if (floor(1 / time.count()) > FPS_CAP)
             {
-                state.fps = 1 / (1 / (double)FPS_CAP) - time.count();
+                state.fps = FPS_CAP;
                 std::this_thread::sleep_for(std::chrono::milliseconds((int)floor(((1 / (double)FPS_CAP) - time.count()) * 1000)));
             }
             else
@@ -136,20 +118,16 @@ int main(int argc, char* argv[]) {
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    //Cleaning up CPU threads
-    for (int i = 0; i < NUM_CPU_THREADS; i++)
-    {
-        threads[i]->join();
-        delete threads[i];
-    }
-
     //Cleaning up 1D result array from GPU mem
     cudaFree(d_result);
 
     //Cleaning up fracState from GPU mem
     cudaFree(d_state);
 
-    //Cleaning up 1D result array
+    //Joins threads in the thread pool before deallocation of result array from CPU mem
+    threadPool.joinThreads();
+
+    //Cleaning up 1D result array from CPU mem
     delete[] result;
 
     return 0;
@@ -187,9 +165,12 @@ void pan(int* beforeX, int* beforeY, const int* afterX, const int* afterY, fracS
 
 /*Handles mouse/keyboard events. Will return true if the user has chosen to close the window
 or false otherwise*/
-bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, fracState* state)
+bool eventHandler(SDL_Event* event, SDL_Point* mouseCoords, fracState* state)
 {
-    SDL_FlushEvents(SDL_KEYDOWN, SDL_MOUSEMOTION);
+    static bool mousePanning = false;
+    static bool modeKeyPressed = false;
+
+    SDL_FlushEvents(SDL_TEXTEDITING, SDL_MOUSEMOTION);
     SDL_PollEvent(event);
     SDL_FlushEvent(SDL_MOUSEWHEEL);
 
@@ -203,28 +184,45 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
     const unsigned char* kbState = SDL_GetKeyboardState(NULL);
     const unsigned int mouseState = SDL_GetMouseState(&mouseX, &mouseY);
 
+    //Runs when user presses M key to switch render modes
+    if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_m && !modeKeyPressed)
+        modeKeyPressed = true;
+
+    //Responds to the M key being released by switching render method
+    if (event->type == SDL_KEYUP && event->key.keysym.sym == SDLK_m && modeKeyPressed)
+    {
+        state->calcMethod == CPU ? state->calcMethod = GPU : state->calcMethod = CPU;
+        modeKeyPressed = false;
+    }
+
     //Runs when user starts panning
     if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT)
     {
-        *mousePanning = true;
+        mousePanning = true;
         mouseCoords->x = event->button.x;
         mouseCoords->y = event->button.y;
     }
 
     //Runs when user stops panning
     if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT)
-        *mousePanning = false;
+        mousePanning = false;
 
     //Handles panning events. Runs while the user is panning
-    if (*mousePanning)
+    if (mousePanning)
         pan(&mouseCoords->x, &mouseCoords->y, &mouseX, &mouseY, state);
     else
     {
         //Handles keyboard zoom events (zoom in with W, zoom out with S)
-        if (kbState[SDL_SCANCODE_W] && event->type != SDL_MOUSEWHEEL)
-            zoom(state, 1.05 - (state->fps / (21 * FPS_CAP)), mouseX, mouseY);
-        else if (kbState[SDL_SCANCODE_S] && event->type != SDL_MOUSEWHEEL)
-            zoom(state, 0.95 + (state->fps / (21 * FPS_CAP)), mouseX, mouseY);
+        if (kbState[SDL_SCANCODE_W])
+        {
+            zoom(state, 1.05, mouseX, mouseY);
+            return false;
+        }
+        else if (kbState[SDL_SCANCODE_S])
+        {
+            zoom(state, 0.95, mouseX, mouseY);
+            return false;
+        }
         //Handles scroll wheel zoom events 
         else if (event->type == SDL_MOUSEWHEEL)
         {
@@ -235,9 +233,6 @@ bool eventHandler(SDL_Event* event, bool* mousePanning, SDL_Point* mouseCoords, 
             event->wheel.y = 0;
         }
     }
-    //Responds to the M key being pressed by switching render method
-    if (kbState[SDL_SCANCODE_M])
-        state->calcMethod == CPU ? state->calcMethod = GPU : state->calcMethod = CPU;
 
     return false;
 }
