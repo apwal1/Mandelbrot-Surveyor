@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<settings>
+	<windowWidth>1280</windowWidth>
+	<windowHeight>720</windowHeight>
+	<maxIters>1024</maxIters>
+</settings>

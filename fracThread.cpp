@@ -4,7 +4,7 @@
 using std::unique_lock;
 
 fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, const fracState* state)
-    : windowWidth(double(width)), windowHeight(double(height)), maxIters(iterations), sectionBounds(bounds)
+    : windowWidth(width), windowHeight(height), maxIters(iterations), sectionBounds(bounds)
 {
     xOffset = &state->xPanOffset;
     yOffset = &state->yPanOffset;
@@ -26,27 +26,30 @@ void fracThread::makeFractal(RGB* resultArr)
         unique_lock<mutex> lock(mx);
         start.wait(lock);
 
-        for (int y = sectionBounds.first.y; y < sectionBounds.second.y; y++)
+        if (running)
         {
-            for (int x = sectionBounds.first.x; x < sectionBounds.second.x; x++)
+            for (int y = sectionBounds.first.y; y < sectionBounds.second.y; y++)
             {
-                /*Creates a complex number based on the coordinates of whichever pixel we are
-                drawing and calculates the color the pixel should be*/
-                coordsToComplex(&x, &y, &complexPixel);
-                getSmoothColor(&complexPixel, &smooth);
-
-                if (smooth == -1.0)
-                    r = g = b = 0;
-                else
+                for (int x = sectionBounds.first.x; x < sectionBounds.second.x; x++)
                 {
-                    h = smooth + 255;
-                    HSVtoRGB(r, g, b, h, s, v);
-                }
+                    /*Creates a complex number based on the coordinates of whichever pixel we are
+                    drawing and calculates the color the pixel should be*/
+                    coordsToComplex(&x, &y, complexPixel);
+                    getSmoothColor(&complexPixel, smooth);
 
-                //Saves our result into the 1 dimensional result array that we are using to mimic a 2d array
-                resultArr[y * WINDOW_WIDTH + x].r = r * 255;
-                resultArr[y * WINDOW_WIDTH + x].g = g * 255;
-                resultArr[y * WINDOW_WIDTH + x].b = b * 255;
+                    if (smooth == -1.0)
+                        r = g = b = 0;
+                    else
+                    {
+                        h = smooth + 255;
+                        HSVtoRGB(r, g, b, h, s, v);
+                    }
+
+                    //Saves our result into the 1 dimensional result array that we are using to mimic a 2d array
+                    resultArr[y * windowWidth + x].r = r * 255;
+                    resultArr[y * windowWidth + x].g = g * 255;
+                    resultArr[y * windowWidth + x].b = b * 255;
+                }
             }
         }
     }
@@ -75,22 +78,23 @@ void fracThread::waitUntilDone()
 }
 
 //Returns true if the thread is able to be joined, false otherwise
-bool fracThread::joinable()
+bool fracThread::joinable() const
 {
     return subThread.joinable();
 }
 
 //Converts a pixel's coordinates to a complex number, which will be stored in result
-void fracThread::coordsToComplex(const int* x, const int* y, complex<double>* result)
+void fracThread::coordsToComplex(const int* x, const int* y, complex<double>& result) const
 {
-    result->real(((double)*x + *xOffset) / *xZoom);
-    result->imag(((double)*y + *yOffset) / *yZoom);
+    result.real(((double)*x + *xOffset) / *xZoom);
+    result.imag(((double)*y + *yOffset) / *yZoom);
 }
 
 /*Calculates the number of iterations required to determine whether the passed complex number is
-in the mandelbrot set or not. The result will be placed in the passed double* smooth and will be -1.0
-if the pixel is in the mandelbrot set and should be colored black*/
-void fracThread::getSmoothColor(const complex<double>* complexNum, double* smooth)
+in the mandelbrot set or not and determines a smooth color based on the result. The result will 
+be placed in the passed double* smooth and will be -1.0 if the pixel is (probably) in the mandelbrot 
+set and should be colored black*/
+void fracThread::getSmoothColor(const complex<double>* complexNum, double& smooth) const
 {
     int iters = 0;
     complex<double> z = 0;
@@ -98,16 +102,16 @@ void fracThread::getSmoothColor(const complex<double>* complexNum, double* smoot
     While the former may look more complicated, it is about twice as efficient as the latter*/
     for (; (z.imag() * z.imag()) + (z.real() * z.real()) <= 4 && iters < maxIters; iters++)
         z = z * z + *complexNum;
-    iters == maxIters ? *smooth = -1.0 : calcSmoothColor(&z, &iters, smooth);
+    iters == maxIters ? smooth = -1.0 : calcSmoothColor(&z, &iters, smooth);
 }
 
 //Uses the mandelbrot smooth-coloring algorithm (https://stackoverflow.com/questions/369438/smooth-spectrum-for-mandelbrot-set-rendering)
 //to calculate a value between 0 and 1 which will be used to determine the color of a pixel
-void fracThread::calcSmoothColor(const complex<double>* complexNum, const int* iters, double* smooth)
+void fracThread::calcSmoothColor(const complex<double>* complexNum, const int* iters, double& smooth) const
 {
     //sqrt((complexNum->imag() * complexNum->imag()) + (complexNum->real() * complexNum->real()))
     //is much faster than abs(z) but gives the same result
     double complexAbs = sqrt((complexNum->imag() * complexNum->imag()) + (complexNum->real() * complexNum->real()));
     double complexDoubleLog = log10(log10(complexAbs));
-    *smooth = *iters + 1 - (complexDoubleLog / log10(2));
+    smooth = *iters + 1 - (complexDoubleLog / log10(2));
 }

@@ -1,17 +1,8 @@
 #pragma once
 
-//Window width and height
-#define WINDOW_WIDTH 1280
-#define WINDOW_HEIGHT 720
-
-/*Max iterations before a complex number is considered to be in the mandelbrot set.
-Increasing this will result in a better quality fractal with reduced performance.
-Reducing this will result in a lower quality fractal with improved performance.*/
-#define MAX_ITER 1024
-
 enum RENDERTYPE { CPU, GPU };
 
-//Used to keep track of pan/zoom state and current render method of the fractal
+//Used to keep track of the general state and settings of the fractal such as pan/zoom state, render mode, window dimensions, maximum iterations and FPS
 struct fracState {
     double xZoomScale;
     double yZoomScale;
@@ -19,14 +10,16 @@ struct fracState {
     double yPanOffset;
     RENDERTYPE calcMethod;
     int fps;
-
+    const int windowWidth;
+    const int windowHeight;
+    const int maxIters;
     //Initializes the starting x and y offsets of the fractal, as well as the zoom scale based on those offsets
-    void initialize(int xPan, int yPan, enum RENDERTYPE method)
+    fracState(int width, int height, int iters, enum RENDERTYPE method) : windowWidth(width), windowHeight(height), maxIters(iters)
     {
-        xPanOffset = xPan;
-        yPanOffset = yPan;
-        xZoomScale = xPan / -2;
-        yZoomScale = yPan / -1.5;
+        xPanOffset = -width / 2;
+        yPanOffset = -height / 2;
+        xZoomScale = xPanOffset / -2;
+        yZoomScale = yPanOffset / -1.5;
         calcMethod = method;
         fps = 0;
     }

@@ -27,7 +27,6 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 /* Author: Jan Winkler */
-#include <cuda.h>
 
 __device__
 void HSVtoRGB_GPU(float& fR, float& fG, float& fB, float& fH, float& fS, float& fV) {

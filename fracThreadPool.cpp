@@ -4,20 +4,18 @@ fracThreadPool::fracThreadPool(unsigned int threadCount, RGB* resultArr, const f
 {
 	for (int i = 0; i < threadCount; i++)
 	{
-		SDL_Point start = { i * WINDOW_WIDTH / threadCount, 0 };
-		SDL_Point end = { (i + 1) * WINDOW_WIDTH / threadCount, WINDOW_HEIGHT };
+		SDL_Point start = { i * state->windowWidth / threadCount, 0 };
+		SDL_Point end = { (i + 1) * state->windowWidth / threadCount, state->windowHeight };
 		pair<SDL_Point, SDL_Point> bounds(start, end);
-		threads.push_back(new fracThread(WINDOW_WIDTH, WINDOW_HEIGHT, MAX_ITER, bounds, resultArr, state));
+		threads.push_back(new fracThread(state->windowWidth, state->windowHeight, state->maxIters, bounds, resultArr, state));
 	}
 }
 
-//Properly deallocates threads (if the result array is still pointing to valid, allocated memory)
+//Properly joins and deallocates threads
 fracThreadPool::~fracThreadPool()
 {
 	for (auto i : threads)
 	{
-		/*This will cause an access violation exceotion if the result array has been deallocated
-		before this destructor is called, which indicates to the user of this class that something wrong*/
 		if (i->joinable())
 			i->join();
 
@@ -32,13 +30,4 @@ void fracThreadPool::calcFrame()
 		i->run();
 	for (auto i : threads)
 		i->waitUntilDone();
-}
-
-//Properly makes threads exit (if the result array is still pointing to valid, allocated memory)
-void fracThreadPool::joinThreads()
-{
-	/*This will cause an access violation exceotion if the result array has been deallocated
-	before this function is called, which indicates to the user of this class that something wrong*/
-	for (auto i : threads)
-		i->join();
 }

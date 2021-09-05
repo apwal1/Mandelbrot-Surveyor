@@ -7,7 +7,6 @@ public:
 	fracThreadPool(unsigned int threadCount, RGB* resultArr, const fracState* state);
 	~fracThreadPool();
 	void calcFrame();
-	void joinThreads();
 private:
 	vector<fracThread*> threads;
 };
