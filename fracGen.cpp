@@ -7,7 +7,7 @@ fracGen::fracGen(int windowWidth, int windowHeight, int maxIters) : WINDOW_WIDTH
     result = new RGB[windowWidth * windowHeight];
     cudaMalloc((void**)&d_result, windowWidth * windowHeight * sizeof(RGB));
 
-    threadPool = new fracThreadPool(NUM_CPU_THREADS, result, state);
+    threadPool = new fracThreadPool(NUM_CPU_THREADS, result, *state);
 }
 
 fracGen::~fracGen()
@@ -201,8 +201,10 @@ bool fracGen::eventHandler()
     return false;
 }
 
-void fracGen::logError(std::string errorMsg, const char* (*debugInfoFunc)(), bool* errorFlag, bool spawnWindow)
+void fracGen::logError(const char* errorMsg, const char* (*debugInfoFunc)(), bool* errorFlag, bool spawnWindow)
 {
+    if (errorMsg == nullptr)
+        return;
 
     std::cerr << errorMsg;
     if (debugInfoFunc != nullptr)
@@ -211,7 +213,7 @@ void fracGen::logError(std::string errorMsg, const char* (*debugInfoFunc)(), boo
 
     if (spawnWindow)
     {
-        if (SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", errorMsg.c_str(), NULL) != 0)
+        if (SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", errorMsg, NULL) != 0)
             logError("SDL_ShowSimpleMessageBox failed: ", SDL_GetError, nullptr, false);
     }
     if (errorFlag != nullptr)

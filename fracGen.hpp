@@ -17,7 +17,7 @@ private:
 	bool eventHandler();
 	void zoom(double zoomAmount, int mouseX, int mouseY);
 	void pan(const int& afterX, const int& afterY);
-	void logError(std::string errorMsg, const char* (*errorDebugInfo)(), bool* errorFlag, bool spawnWindow);
+	void logError(const char* errorMsg, const char* (*errorDebugInfo)(), bool* errorFlag, bool spawnWindow);
 	std::string getStateString();
 
 	const int FPS_CAP = 30;

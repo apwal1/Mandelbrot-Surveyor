@@ -3,19 +3,35 @@
 
 using std::unique_lock;
 
-fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, const fracState* state)
-    : windowWidth(width), windowHeight(height), maxIters(iterations), sectionBounds(bounds)
+fracThread::fracThread(int width, int height, int iterations, pair<SDL_Point, SDL_Point> bounds, RGB* arr, const fracState& state)
+    : sectionBounds(bounds)
 {
-    xOffset = &state->xPanOffset;
-    yOffset = &state->yPanOffset;
-    xZoom = &state->xZoomScale;
-    yZoom = &state->yZoomScale;
+    xOffset = &state.xPanOffset;
+    yOffset = &state.yPanOffset;
+    xZoom = &state.xZoomScale;
+    yZoom = &state.yZoomScale;
+    windowWidth = width;
+    windowHeight = height;
+    maxIters = iterations;
+    resultArr = arr;
+    subThread = thread(&fracThread::makeFractal, this);
+}
 
-    subThread = thread(&fracThread::makeFractal, this, arr);
+fracThread::fracThread(const fracThread& rhs) : sectionBounds(rhs.sectionBounds)
+{
+    xOffset = rhs.xOffset;
+    yOffset = rhs.yOffset;
+    xZoom = rhs.xZoom;
+    yZoom = rhs.yZoom;
+    windowWidth = rhs.windowWidth;
+    windowHeight = rhs.windowHeight;
+    maxIters = rhs.maxIters;
+    resultArr = rhs.resultArr;
+    subThread = thread(&fracThread::makeFractal, this);
 }
 
 //Calculates the thread's portion of the fractal
-void fracThread::makeFractal(RGB* resultArr)
+void fracThread::makeFractal()
 {
     float h, s = 0.7, v = 1.0, r, g, b;
     complex<double> complexPixel;
